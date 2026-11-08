@@ -20,6 +20,7 @@ const ATTACK_RANGES := [BLADE_REACH, FROST_REACH, 198.0, 245.0]
 # Relative contributions of one untrained unit, including range and support.
 const POWER_WEIGHTS := [1.0, 1.05, 1.35, 1.25]
 const EXPECTED_WAVE_POWER := [2.0, 5.0, 10.0]
+const MAX_WAVE_HP_PERCENT := 5000
 const ALLY_BUTTONS := [Rect2(20,128,136,50),Rect2(161,128,136,50),Rect2(302,128,136,50),Rect2(443,128,137,50)]
 const AUTO_BUTTON := Rect2(209,849,152,37)
 const LEVEL_DOWN_BUTTON := Rect2(369,797,48,43)
@@ -106,7 +107,7 @@ func projected_hp_percent(wave: int) -> int:
 	# A partial response keeps upgrades valuable even above the expected strength.
 	var adjustment := 60.0 * (power - expected) / (power + expected)
 	adjustment += 18.0 * maxf(0.0, power / expected - 2.0)
-	return clampi(roundi(100.0 + adjustment), 80, 200)
+	return roundi(clampf(100.0 + adjustment, 80.0, MAX_WAVE_HP_PERCENT))
 
 func board_snapshot() -> Dictionary:
 	return {"stage":stage, "hp":hp, "seeds":seeds, "training":training, "selected":selected_ally,

@@ -10,6 +10,8 @@ const Enemy = preload("res://scripts/enemy_mover.gd")
 const MUSHROOM = Enemy.Kind.MUSHROOM
 const MOTH = Enemy.Kind.MOTH
 const TURTLE = Enemy.Kind.TURTLE
+const MAX_PACK_SCALE := 5.0
+const MAX_SPAWN_RATE := 4.0
 const WAVES = [
 	{"roster": [MUSHROOM, MUSHROOM, MOTH, MUSHROOM, MOTH, MUSHROOM], "hp": 4, "speed": 94, "interval": 1.4},
 	{"roster": [MUSHROOM, MOTH, TURTLE, MUSHROOM, MOTH, MUSHROOM, MOTH, TURTLE], "hp": 8, "speed": 102, "interval": 1.12},
@@ -56,11 +58,12 @@ func extra_stage_enemies() -> int:
 func pack_size(wave: int, percent: int) -> int:
 	var base_count: int = WAVES[wave - 1].roster.size() + extra_stage_enemies()
 	var scale := percent / 100.0
-	return roundi(base_count * (scale + 0.5 * maxf(0.0, scale - 1.0)))
+	var pack_scale := minf(MAX_PACK_SCALE, scale + 0.5 * maxf(0.0, scale - 1.0))
+	return roundi(base_count * pack_scale)
 
 func spawn_interval(wave: int, percent: int) -> float:
 	var base_interval := maxf(0.58, WAVES[wave - 1].interval - 0.035 * (stage - 1))
-	return base_interval / (percent / 100.0)
+	return base_interval / minf(MAX_SPAWN_RATE, percent / 100.0)
 
 func wave_roster(wave: int) -> Array:
 	var members: Array = WAVES[wave - 1].roster.duplicate()
