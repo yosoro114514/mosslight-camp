@@ -15,6 +15,7 @@ var hp := 4.0
 var kind := Kind.MUSHROOM
 var is_boss := false
 var frost_remaining := 0.0
+var entry_guard := 0.0
 var max_hp := 4
 var speed := 94.0
 var is_destroyed := false
@@ -40,7 +41,8 @@ func _physics_process(delta: float) -> void:
 	heal_flash = maxf(0, heal_flash - delta)
 	block_notice = maxf(0, block_notice - delta)
 	var dash := kind == Kind.BEETLE and fmod(ability_clock, 3.0) >= 2.25
-	progress += speed * (1.95 if dash else 1.0) * (delta - 0.4 * chilled_time)
+	var pace := speed * (1.95 if dash else 1.0) * (1.0 + 0.5 * entry_reduction())
+	progress += pace * (delta - 0.4 * chilled_time)
 	frost_remaining -= chilled_time
 	if kind == Kind.SLIME and ability_clock >= 2.4:
 		ability_clock -= 2.4
@@ -56,6 +58,11 @@ func _physics_process(delta: float) -> void:
 func finished_path() -> void:
 	resolve(true)
 
+func entry_reduction() -> float:
+	if entry_guard == 0.0:
+		return 0.0
+	return entry_guard * maxf(0.0, 1.0 - progress_ratio / 0.35)
+
 func get_damage(attack: int, damage_type: DamageType) -> void:
 	if is_destroyed:
 		return
@@ -70,7 +77,8 @@ func get_damage(attack: int, damage_type: DamageType) -> void:
 			return
 	else:
 		damage = attack * (100 - int(MAGIC_RESIST_PERCENT[kind])) / 100.0
-	# Integer attacks and whole-percent resistance give damage to the hundredth.
+	# Apply entry protection after armor and resistance.
+	damage *= 1.0 - entry_reduction()
 	hp = snappedf(maxf(0, hp - damage), 0.01)
 	flash = 0.13
 	if hp <= 0:
@@ -87,6 +95,12 @@ func _draw() -> void:
 	var bob := absf(sin(progress * 0.081)) * 3.4
 	var size: float = 78.0 if is_boss else SIZES[kind]
 	var lift := 5.0 if kind == Kind.MOTH else 0.0
+	var guard := entry_reduction()
+	if guard > 0.0:
+		var center := Vector2(0, -size * 0.28 - bob - lift)
+		var radius := size * 0.54
+		draw_circle(center, radius, Color(1.0, 0.77, 0.27, 0.18 * guard), true, -1, true)
+		draw_arc(center, radius, -PI/2, -PI/2 + TAU * guard, 36, Color(1.0, 0.86, 0.43, 0.9), 3.0, true)
 	var tint := Color("#99e7ff") if frost_remaining > 0 else Color.WHITE
 	if flash > 0:
 		tint = Color(1.5, 1.25, 1.1)

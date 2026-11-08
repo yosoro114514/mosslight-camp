@@ -55,6 +55,9 @@ func adjusted_hp(stage_hp: int) -> int:
 func extra_stage_enemies() -> int:
 	return mini(stage - 1, 8)
 
+func late_wave_pressure() -> float:
+	return clampf((stage - 3) / 7.0, 0.0, 1.0)
+
 func pack_size(wave: int, percent: int) -> int:
 	var base_count: int = WAVES[wave - 1].roster.size() + extra_stage_enemies()
 	var scale := percent / 100.0
@@ -125,6 +128,7 @@ func _on_spawn_delay_timeout() -> void:
 			enemy.speed *= 0.85
 	enemy.max_hp = adjusted_hp(enemy.max_hp)
 	enemy.hp = enemy.max_hp
+	enemy.entry_guard = 0.85 * late_wave_pressure()
 	enemy.loop = false
 	enemy.rotates = false
 	enemy.resolved.connect(enemy_destroyed)
@@ -139,6 +143,7 @@ func spawn_final_boss() -> void:
 	boss.is_boss = true
 	boss.max_hp = adjusted_hp(strength(84))
 	boss.hp = boss.max_hp
+	boss.entry_guard = 0.85 * late_wave_pressure()
 	boss.speed = 55.0
 	boss.loop = false
 	boss.rotates = false
