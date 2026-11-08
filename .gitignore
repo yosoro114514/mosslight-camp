@@ -1,0 +1,8 @@
+.godot/
+dist/*
+!dist/.gdignore
+!dist/licenses/
+dist/licenses/*
+!dist/licenses/Godot-LICENSE.txt
+!dist/licenses/Godot-COPYRIGHT.txt
+

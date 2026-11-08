@@ -1,0 +1,56 @@
+name: Publish game to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Godot 4.4.1 and its single-threaded Web template
+        working-directory: ${{ runner.temp }}
+        run: |
+          release=https://github.com/godotengine/godot-builds/releases/download/4.4.1-stable
+          editor=Godot_v4.4.1-stable_linux.x86_64
+          curl --fail --location --retry 3 "$release/$editor.zip" -o editor.zip
+          unzip -q editor.zip "$editor"
+          chmod +x "$editor"
+          ln -s "$PWD/$editor" "$PWD/godot"
+          echo "$PWD" >> "$GITHUB_PATH"
+          curl --fail --location --retry 3 "$release/Godot_v4.4.1-stable_export_templates.tpz" -o templates.tpz
+          install -d "$HOME/.local/share/godot/export_templates/4.4.1.stable"
+          unzip -joq templates.tpz templates/web_nothreads_release.zip -d "$HOME/.local/share/godot/export_templates/4.4.1.stable"
+      - name: Export game
+        run: |
+          mkdir -p dist/web/licenses
+          godot --headless --path . --import
+          godot --headless --path . --export-release Web dist/web/index.html
+          for ext in html js wasm pck; do test -s "dist/web/index.$ext"; done
+          cp dist/licenses/Godot-*.txt art/OFL.txt LICENSE-template.txt dist/web/licenses/
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy game
+        id: deployment
+        uses: actions/deploy-pages@v4
