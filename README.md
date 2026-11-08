@@ -9,7 +9,7 @@ Godot 4.4.1 竖屏塔防。Windows 64 位双击 `dist/MosslightCamp.exe`。在�
 3. 打开 **Actions → Publish game to GitHub Pages → Run workflow**，选择发布分支运行一次。之后每次推送到发布分支都会自动重新导出并部署游戏。
 4. 点击部署记录中 `github-pages` 的网址即可试玩。普通项目仓库的默认地址形如 `https://用户名.github.io/仓库名/`。
 
-本地预览可用 Godot 4.4.1 安装对应导出模板，创建 `dist/web` 目录，运行 `godot --headless --import` 和 `godot --headless --export-release Web dist/web/index.html`。在项目根目录运行 `python -m http.server 8000 --bind 127.0.0.1 --directory dist` 后访问 `http://127.0.0.1:8000/web/`。网页进度保存在当前浏览器中。
+本地预览可用 Godot 4.4.1 安装对应导出模板，创建 `dist/web` 目录，运行 `godot --headless --import` 和 `godot --headless --export-release Web dist/web/index.html`。每次导出 Web 发布版后运行 `python tools/fix_webgl_handles.py dist/web/index.js`，使绘制战斗特效时释放的 WebGL 编号可供复用。GitHub Pages 构建会自动执行这一步。在项目根目录运行 `python -m http.server 8000 --bind 127.0.0.1 --directory dist` 后访问 `http://127.0.0.1:8000/web/`。网页进度保存在当前浏览器中。
 
 ## 无尽守夜
 

@@ -35,6 +35,7 @@ jobs:
           mkdir -p dist/web/licenses
           godot --headless --path . --import
           godot --headless --path . --export-release Web dist/web/index.html
+          python3 tools/fix_webgl_handles.py dist/web/index.js
           for ext in html js wasm pck; do test -s "dist/web/index.$ext"; done
           cp dist/licenses/Godot-*.txt art/OFL.txt LICENSE-template.txt dist/web/licenses/
       - uses: actions/upload-pages-artifact@v4
