@@ -1,0 +1,10 @@
+[gd_resource type="Resource" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemy_profile.gd" id="1"]
+[ext_resource type="Texture2D" path="res://art/gremlin.png" id="2"]
+
+[resource]
+script = ExtResource("1")
+display_name = "蘑菇怪"
+portrait = ExtResource("2")
+guide_note = "成群沿路前进，旋刀和霜环可同时命中多只。"

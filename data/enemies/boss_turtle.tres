@@ -1,0 +1,15 @@
+[gd_resource type="Resource" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemy_profile.gd" id="1"]
+[ext_resource type="Texture2D" path="res://art/turtle.png" id="2"]
+
+[resource]
+script = ExtResource("1")
+display_name = "金冠岩壳龟"
+portrait = ExtResource("2")
+guide_note = "普通怪物全部离场后登场，适合用重针集火。"
+sprite_size = 78.0
+defense = 2
+magic_resist_percent = -20
+boss_base_hp = 84
+boss_speed = 55.0

@@ -1,0 +1,15 @@
+[gd_resource type="Resource" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemy_profile.gd" id="1"]
+[ext_resource type="Texture2D" path="res://art/moth.png" id="2"]
+
+[resource]
+script = ExtResource("1")
+display_name = "疾翅蛾"
+portrait = ExtResource("2")
+guide_note = "飞行速度快，可用霜兔减速。"
+sprite_size = 43.0
+lift = 5.0
+magic_resist_percent = 25
+hp_multiplier = 0.65
+speed_multiplier = 1.65

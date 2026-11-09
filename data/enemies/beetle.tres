@@ -1,0 +1,16 @@
+[gd_resource type="Resource" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemy_profile.gd" id="1"]
+[ext_resource type="Texture2D" path="res://art/beetle.png" id="2"]
+
+[resource]
+script = ExtResource("1")
+display_name = "赤角甲虫"
+portrait = ExtResource("2")
+guide_note = "短时冲刺"
+sprite_size = 48.0
+defense = 1
+speed_multiplier = 0.95
+dash_period = 3.0
+dash_duration = 0.75
+dash_speed_multiplier = 1.95

@@ -8,6 +8,11 @@ const ICE := Color("#ffc1de")
 const WIND := Color("#68efdb")
 const SPARK := Color("#fff5bb")
 
+static func travel_fraction(owl: bool, power: bool) -> float:
+	if owl:
+		return 0.18
+	return 0.19 if power else 0.28
+
 # Transform only the portrait. The base and level badge stay on their tile.
 static func pose(g, cell: int) -> Transform2D:
 	if not g.attack_poses.has(cell) or g.forms[cell] < Evolution.Form.POWER:
@@ -118,7 +123,8 @@ static func draw_hit(n: CanvasItem, g, event: Dictionary) -> void:
 					n.draw_line(end-arm,end+arm,Color(Color.WHITE,alpha),2,true)
 				n.draw_arc(end,6+8*age,0,TAU,20,Color(WIND,alpha),1.5,true)
 		g.Ally.OWL:
-			var head := origin.lerp(end,minf(1,age/0.18))
+			var arrival := travel_fraction(true,power)
+			var head := origin.lerp(end,minf(1,age/arrival))
 			var bend := axis.orthogonal()*minf(11,origin.distance_to(head)*0.18)
 			var bolt := PackedVector2Array([origin,origin.lerp(head,0.38)+bend,origin.lerp(head,0.57)-bend,head])
 			var hue := Color("#ffc257") if power else WIND
@@ -126,14 +132,14 @@ static func draw_hit(n: CanvasItem, g, event: Dictionary) -> void:
 			n.draw_polyline(bolt,Color(hue.darkened(0.45),alpha),weight*alpha+2,true)
 			n.draw_polyline(bolt,Color(hue,alpha),weight*alpha,true)
 			n.draw_polyline(bolt,Color(Color.WHITE,alpha),1.4,true)
-			if age >= 0.18:
+			if age >= arrival:
 				if power and event.hop == 0 and age < 0.80:
 					var column := PackedVector2Array([end+Vector2(6,-48),end+Vector2(-5,-25),end+Vector2(4,-28),end])
 					n.draw_polyline(column,Color(hue,alpha),7*alpha+1,true)
 					n.draw_polyline(column,Color(Color.WHITE,alpha),2,true)
-				impact(n,end,axis,(age-0.18)/0.82,hue,26 if power and event.hop==0 else 12)
+				impact(n,end,axis,(age-arrival)/(1-arrival),hue,26 if power and event.hop==0 else 12)
 		g.Ally.HEDGEHOG:
-			var travel := minf(1,age/(0.19 if power else 0.28))
+			var travel := minf(1,age/travel_fraction(false,power))
 			var head := origin.lerp(end,travel)
 			var length := minf(origin.distance_to(head),32 if power else 15)
 			var hue := EMBER if power else WIND

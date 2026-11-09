@@ -1,0 +1,15 @@
+[gd_resource type="Resource" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemy_profile.gd" id="1"]
+[ext_resource type="Texture2D" path="res://art/slime.png" id="2"]
+
+[resource]
+script = ExtResource("1")
+display_name = "苔灵"
+portrait = ExtResource("2")
+guide_note = "持续回血"
+sprite_size = 47.0
+magic_resist_percent = 35
+speed_multiplier = 0.85
+heal_period = 2.4
+heal_percent = 10

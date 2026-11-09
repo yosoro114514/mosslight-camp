@@ -2,7 +2,7 @@ config_version=5
 
 [application]
 config/name="苔灯营地"
-run/main_scene="res://scenes/camp.tscn"
+run/main_scene="res://scenes/start.tscn"
 config/features=PackedStringArray("4.4", "GL Compatibility")
 config/icon="res://art/fox.png"
 

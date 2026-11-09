@@ -33,9 +33,14 @@ const RECALL_RECT := Rect2(20,128,560,50)
 const TRAIN_COST := 18
 const MAX_HP := 5
 const MAX_LEVEL := 5
-const BUTTON := Rect2(389, 722, 164, 55)
+const BUTTON := Rect2(389, 705, 164, 46)
+const SOUND_BUTTON := Rect2(498, 26, 67, 41)
+const RESTART_BUTTON := Rect2(498, 69, 67, 43)
 const RESULT_BUTTON := Rect2(202, 495, 196, 52)
 const NEW_RUN_BUTTON := Rect2(202, 587, 196, 40)
+const RETRY_CHOICE := Rect2(100, 345, 400, 66)
+const NEW_RUN_CHOICE := Rect2(100, 425, 400, 76)
+const CANCEL_RESTART := Rect2(211, 532, 178, 46)
 const BED_POS := Vector2(323, 220)
 enum Phase { PREP, BATTLE, WON, LOST }
 
@@ -44,12 +49,16 @@ var stage := 1
 var training := 0
 var checkpoints := preload("res://scripts/checkpoints.gd").new()
 var checkpoint := {}
+var starting_board := {}
+var restart_open := false
+var restart_error := ""
 var hp := MAX_HP
 var seeds := 6
 var levels := PackedInt32Array()
 var allies := PackedInt32Array()
 var forms := PackedByteArray()
 var evolution := Evolution.new()
+var bestiary := preload("res://scripts/bestiary.gd").new()
 var attack_cooldowns := PackedFloat32Array()
 var selected_ally := Ally.FOX
 var plant_level := 1
@@ -73,25 +82,30 @@ var pressed_at := Vector2.ZERO
 var pointer := Vector2(-999,-999)
 var dragging := false
 var art := BoardArt.new()
+var sound := preload("res://scripts/camp_sound.gd").new()
 @onready var path = $PathSpawner
 
 func _ready() -> void:
+	add_child(sound)
 	levels.resize(COLS * ROWS)
 	allies.resize(levels.size())
 	forms.resize(levels.size())
 	add_child(evolution)
+	add_child(bestiary)
 	evolution.chosen.connect(resolve_evolution)
 	attack_cooldowns.resize(levels.size())
 	levels[0] = 1
 	path.curve = make_route()
 	path.hp_forecast = projected_hp_percent
-	path.wave_started.connect(func(_wave): intermission = false)
+	path.wave_started.connect(_on_wave_started)
+	path.boss_spawned.connect(func(): sound.play_cue(&"boss"))
 	path.wave_cleared.connect(func(): intermission = true)
 	path.enemy_resolved.connect(_on_enemy_resolved)
 	path.completed.connect(func(): finish(true))
+	starting_board = board_snapshot()
 	checkpoint = checkpoints.latest(levels.size(), ALLY_NAMES.size(), MAX_LEVEL, MAX_HP)
 	if checkpoint.is_empty():
-		checkpoint = board_snapshot()
+		checkpoint = starting_board.duplicate(true)
 	else:
 		restore_checkpoint()
 	queue_redraw()
@@ -147,6 +161,7 @@ func restore_checkpoint() -> void:
 	bed_flash = 0
 	intermission = false
 	orbit_phase = 0
+	elapsed = 0
 	trails.clear()
 	attack_poses.clear()
 	sparks.clear()
@@ -157,6 +172,24 @@ func restore_checkpoint() -> void:
 func save_preparation() -> void:
 	if phase == Phase.PREP:
 		save_board()
+
+func set_restart_open(value: bool) -> void:
+	cancel_pointer()
+	restart_open = value
+	restart_error = ""
+	get_tree().paused = value
+	$Foreground.queue_redraw()
+
+func restart_run() -> bool:
+	var fresh := starting_board.duplicate(true)
+	if not checkpoints.write(fresh):
+		restart_error = "进度保存失败，请检查磁盘空间"
+		$Foreground.queue_redraw()
+		return false
+	checkpoint = fresh
+	set_restart_open(false)
+	restore_checkpoint()
+	return true
 
 func make_route() -> Curve2D:
 	var route := Curve2D.new()
@@ -204,6 +237,10 @@ func start_battle() -> void:
 	save_board()
 	phase = Phase.BATTLE
 	path.start()
+
+func _on_wave_started(_wave: int) -> void:
+	intermission = false
+	sound.play_cue(&"wave")
 
 func _process(delta: float) -> void:
 	elapsed += delta
@@ -262,17 +299,19 @@ func fire_support_units(delta: float) -> void:
 		for enemy: Enemy in enemies:
 			if enemy.is_destroyed or center.distance_squared_to(enemy.position) > reach * reach:
 				continue
-			if forms[cell] >= Evolution.Form.POWER:
-				if attack_cooldowns[cell] == 0:
+			if attack_cooldowns[cell] == 0:
+				sound.play_cue(&"frost")
+				if forms[cell] >= Evolution.Form.POWER:
 					begin_attack_pose(cell, enemy.position)
 					trails.append({"pulse":true, "from":center, "reach":reach, "form":forms[cell], "life":0.46})
 			attack_cooldowns[cell] = FROST_INTERVAL
 			enemy.frost_remaining = maxf(enemy.frost_remaining, duration)
-			enemy.get_damage(((1 << (levels[cell] - 1)) + training) * attack_multiplier(cell), Enemy.DamageType.MAGIC)
+			var delay := 0.0
+			if forms[cell] == Evolution.Form.AREA:
+				delay = 0.30 * clampf((center.distance_to(enemy.position) - 12) / (reach - 12), 0, 1)
+			var attack := ((1 << (levels[cell] - 1)) + training) * attack_multiplier(cell)
+			enemy.get_damage(attack, Enemy.DamageType.MAGIC, enemy.position - center, delay)
 			if forms[cell] >= Evolution.Form.POWER:
-				var delay := 0.0
-				if forms[cell] == Evolution.Form.AREA:
-					delay = 0.30 * clampf((center.distance_to(enemy.position) - 12) / (reach - 12), 0, 1)
 				record_evolved_hit(cell, center, enemy, delay)
 			if phase != Phase.BATTLE:
 				return
@@ -288,6 +327,7 @@ func fire_ranged(cell: int, center: Vector2, enemies: Array) -> void:
 			target = enemy
 	if target == null:
 		return
+	sound.play_cue(&"bolt" if owl else &"needle")
 	attack_cooldowns[cell] = 1.4 if owl else 1.75
 	var damage := (2 if owl else 4) * (1 << (levels[cell] - 1)) + training
 	damage *= attack_multiplier(cell)
@@ -302,9 +342,10 @@ func fire_ranged(cell: int, center: Vector2, enemies: Array) -> void:
 		begin_attack_pose(cell, target.position)
 	for hop in hits:
 		var end := target.position
-		target.get_damage(damage, Enemy.DamageType.MAGIC if owl else Enemy.DamageType.PHYSICAL)
+		var delay := hop * (0.08 if area else 0.035) if evolved else 0.0
+		var arrival := delay + art.StrikeFX.travel_fraction(owl, not area) * art.StrikeFX.HIT_TIME if evolved else 0.0
+		target.get_damage(damage, Enemy.DamageType.MAGIC if owl else Enemy.DamageType.PHYSICAL, end - origin, arrival)
 		if evolved:
-			var delay := hop * (0.08 if area else 0.035)
 			record_evolved_hit(cell, origin, target, delay, struck.back() if hop > 0 else null, hop)
 		else:
 			trails.append({"from":origin, "to":end, "owl":owl, "level":levels[cell], "form":forms[cell], "life":0.20})
@@ -347,12 +388,13 @@ func strike_with_blades(previous_phase: float) -> void:
 				if not a.is_equal_approx(b):
 					closest = Geometry2D.get_closest_point_to_segment(Vector2.ZERO, a, b)
 				if (contacts & bit) == 0 and closest.length_squared() <= contact_squared:
+					sound.play_cue(&"blade")
 					if forms[cell] >= Evolution.Form.POWER:
 						begin_attack_pose(cell, enemy.position)
 						record_evolved_hit(cell, center, enemy, 0)
 					else:
 						burst(enemy.position, art.LEVEL_COLORS[levels[cell] - 1])
-					enemy.get_damage(((1 << levels[cell]) - 1 + training) * attack_multiplier(cell), Enemy.DamageType.PHYSICAL)
+					enemy.get_damage(((1 << levels[cell]) - 1 + training) * attack_multiplier(cell), Enemy.DamageType.PHYSICAL, axis.orthogonal())
 					if phase != Phase.BATTLE:
 						return
 				if b.length_squared() <= contact_squared:
@@ -370,9 +412,9 @@ func record_evolved_hit(cell: int, origin: Vector2, target: Enemy, delay: float,
 	var hit := {"kind":allies[cell], "form":forms[cell], "from":origin, "to":target.position,
 			"target":target, "previous":previous, "hop":hop, "life":delay + art.StrikeFX.HIT_TIME}
 	if delay > 0 and target.is_destroyed:
-		hit.echo = Enemy.TEXTURES[target.kind]
-		hit.echo_size = 78.0 if target.is_boss else Enemy.SIZES[target.kind]
-		hit.echo_lift = 5 if target.kind == Enemy.Kind.MOTH else 0
+		hit.echo = target.profile.portrait
+		hit.echo_size = target.profile.sprite_size
+		hit.echo_lift = target.profile.lift
 	trails.append(hit)
 
 func _on_enemy_resolved(leaked: bool) -> void:
@@ -382,12 +424,15 @@ func _on_enemy_resolved(leaked: bool) -> void:
 		burst(BED_POS, Color("#ff796c"))
 		if hp == 0:
 			finish(false)
+		else:
+			sound.play_cue(&"bed_hit")
 	else:
 		seeds += 2
 		hit_count += 1
 
 func finish(won: bool) -> void:
 	phase = Phase.WON if won else Phase.LOST
+	sound.play_cue(&"won" if won else &"lost")
 	path.stop()
 	for enemy in get_tree().get_nodes_in_group("enemy"):
 		enemy.set_physics_process(false)
@@ -424,6 +469,7 @@ func place(index: int, level: int = plant_level) -> void:
 	allies[index] = selected_ally
 	attack_cooldowns[index] = 0.0
 	plant_remaining = PLANT_COOLDOWN
+	sound.play_cue(&"plant")
 	burst(cell_pos(index), art.LEVEL_COLORS[level - 1])
 	save_preparation()
 
@@ -436,6 +482,7 @@ func drop_pet(source: int, dest: int) -> void:
 		forms[dest] = forms[source]
 		attack_cooldowns[dest] = attack_cooldowns[source]
 		attack_poses.erase(dest)
+		sound.play_cue(&"tap")
 	elif can_evolve(source, dest):
 		evolution.open(source, dest)
 		return
@@ -443,6 +490,7 @@ func drop_pet(source: int, dest: int) -> void:
 		levels[dest] += 1
 		merge_count += 1
 		burst(cell_pos(dest), art.LEVEL_COLORS[levels[dest] - 1])
+		sound.play_cue(&"merge")
 		message("合成成功  ·  %d 级%s" % [levels[dest], ALLY_NAMES[allies[dest]]])
 	else:
 		message("伙伴已满级" if allies[source] == allies[dest] and levels[source] == MAX_LEVEL and levels[dest] == MAX_LEVEL else "相同种类、相同等级的伙伴可以合成")
@@ -474,11 +522,13 @@ func resolve_evolution(choice: int) -> void:
 	forms[source] = Evolution.Form.NORMAL
 	attack_cooldowns[source] = 0
 	if success:
+		sound.play_cue(&"merge")
 		forms[dest] = choice
 		merge_count += 1
 		burst(cell_pos(dest), Evolution.COLORS[choice - Evolution.Form.POWER])
 		message("超进化成功 · %s" % Evolution.NAMES[allies[dest]][choice - Evolution.Form.POWER])
 	else:
+		sound.play_cue(&"lost")
 		forms[dest] = Evolution.Form.GUARANTEED
 		message("超进化失败 · 目标保留，下次以它为目标必成")
 	save_preparation()
@@ -509,8 +559,10 @@ func save_deployment_choice() -> void:
 	if not checkpoints.write(checkpoint):
 		message("进度保存失败，请检查磁盘空间")
 
-func _input(event: InputEvent) -> void:
-	if event is InputEventScreenTouch:
+func handle_input(event: InputEvent) -> void:
+	if restart_open and event.is_action_pressed("ui_cancel"):
+		set_restart_open(false)
+	elif event is InputEventScreenTouch:
 		if event.canceled and event.index == pointer_id:
 			cancel_pointer()
 		elif event.pressed:
@@ -530,44 +582,53 @@ func _input(event: InputEvent) -> void:
 func begin_pointer(id: int, pos: Vector2) -> void:
 	if pointer_id != -2:
 		return
+	if not SOUND_BUTTON.has_point(pos):
+		sound.activate()
 	pointer_id = id
 	pressed_at = pos
 	pointer = pos
-	pressed_cell = cell_at(pos)
+	pressed_cell = cell_at(pos) if not restart_open and phase <= Phase.BATTLE else -1
 
 func move_pointer(pos: Vector2) -> void:
 	pointer = pos
 	if pressed_cell >= 0 and levels[pressed_cell] > 0 and pos.distance_to(pressed_at) >= 8:
 		dragging = true
 
+func tapped(rect: Rect2, pos: Vector2) -> bool:
+	return rect.has_point(pressed_at) and rect.has_point(pos)
+
 func end_pointer(id: int, pos: Vector2) -> void:
 	if id != pointer_id:
 		return
 	move_pointer(pos)
 	var dest := cell_at(pos)
-	if phase == Phase.WON or phase == Phase.LOST:
-		if RESULT_BUTTON.has_point(pressed_at) and RESULT_BUTTON.has_point(pos):
+	if restart_open:
+		if tapped(CANCEL_RESTART, pos):
+			set_restart_open(false)
+		elif phase == Phase.BATTLE and tapped(RETRY_CHOICE, pos):
+			set_restart_open(false)
 			restore_checkpoint()
-		elif phase == Phase.LOST and NEW_RUN_BUTTON.has_point(pressed_at) and NEW_RUN_BUTTON.has_point(pos):
-			stage = 1
-			training = 0
-			auto_enabled = false
-			hp = MAX_HP
-			seeds = 6
-			selected_ally = Ally.FOX
-			plant_level = 1
-			allies.fill(Ally.FOX)
-			levels.fill(0)
-			forms.fill(Evolution.Form.NORMAL)
-			levels[0] = 1
-			save_board()
+		elif tapped(NEW_RUN_CHOICE, pos):
+			restart_run()
+	elif tapped(SOUND_BUTTON, pos):
+		sound.toggle_mute()
+		sound.activate()
+	elif phase == Phase.WON or phase == Phase.LOST:
+		if tapped(RESULT_BUTTON, pos):
 			restore_checkpoint()
+		elif tapped(NEW_RUN_BUTTON, pos):
+			set_restart_open(true)
+	elif tapped(RESTART_BUTTON, pos):
+		set_restart_open(true)
+	elif tapped(bestiary.OPEN_BUTTON, pos):
+		bestiary.open()
 	elif pressed_cell >= 0 and dragging:
 		if phase == Phase.PREP and RECALL_RECT.has_point(pos):
 			seeds += 1 << (levels[pressed_cell] - 1)
 			levels[pressed_cell] = 0
 			forms[pressed_cell] = Evolution.Form.NORMAL
 			attack_cooldowns[pressed_cell] = 0
+			sound.play_cue(&"tap")
 			save_board()
 		else:
 			drop_pet(pressed_cell, dest)
@@ -581,32 +642,36 @@ func end_pointer(id: int, pos: Vector2) -> void:
 				_: message("超进化 · %s" % Evolution.NAMES[allies[dest]][forms[dest] - Evolution.Form.POWER])
 		else:
 			message("%d 级%s  ·  拖至同种同级伙伴合成" % [levels[dest], ALLY_NAMES[allies[dest]]])
-	elif LEVEL_DOWN_BUTTON.has_point(pressed_at) and LEVEL_DOWN_BUTTON.has_point(pos):
+	elif tapped(LEVEL_DOWN_BUTTON, pos):
 		change_plant_level(-1)
-	elif LEVEL_UP_BUTTON.has_point(pressed_at) and LEVEL_UP_BUTTON.has_point(pos):
+	elif tapped(LEVEL_UP_BUTTON, pos):
 		change_plant_level(1)
-	elif AUTO_BUTTON.has_point(pressed_at) and AUTO_BUTTON.has_point(pos):
+	elif tapped(AUTO_BUTTON, pos):
 		auto_enabled = not auto_enabled
+		sound.play_cue(&"tap")
 		auto_delay = AUTO_INTERVAL
 		notice_time = 0.0
 		save_deployment_choice()
-	elif TRAIN_BUTTON.has_point(pressed_at) and TRAIN_BUTTON.has_point(pos):
+	elif tapped(TRAIN_BUTTON, pos):
 		if seeds >= TRAIN_COST:
 			seeds -= TRAIN_COST
 			training += 1
+			sound.play_cue(&"merge")
 			message("全队训练成功，每次攻击伤害增加 1")
 			save_preparation()
 		else:
 			message("全队训练需要 %d 枚种子" % TRAIN_COST)
-	elif BUTTON.has_point(pressed_at) and BUTTON.has_point(pos):
+	elif tapped(BUTTON, pos):
 		if phase == Phase.PREP:
 			start_battle()
 		elif phase == Phase.BATTLE:
 			Engine.time_scale = 2.0 if Engine.time_scale == 1.0 else 1.0
+			sound.play_cue(&"tap")
 	else:
 		for kind in ALLY_BUTTONS.size():
-			if ALLY_BUTTONS[kind].has_point(pressed_at) and ALLY_BUTTONS[kind].has_point(pos):
+			if tapped(ALLY_BUTTONS[kind], pos):
 				selected_ally = kind
+				sound.play_cue(&"tap")
 				notice_time = 0.0
 				save_deployment_choice()
 	cancel_pointer()
@@ -615,6 +680,7 @@ func change_plant_level(step: int) -> void:
 	var next := clampi(plant_level + step, 1, MAX_LEVEL)
 	if next != plant_level:
 		plant_level = next
+		sound.play_cue(&"tap")
 		notice_time = 0.0
 		save_deployment_choice()
 
@@ -628,6 +694,8 @@ func _notification(what: int) -> void:
 		cancel_pointer()
 
 func _exit_tree() -> void:
+	if restart_open:
+		get_tree().paused = false
 	Engine.time_scale = 1.0
 
 func _draw() -> void:

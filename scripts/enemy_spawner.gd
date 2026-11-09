@@ -3,6 +3,7 @@ extends Path2D
 
 signal wave_started(number: int)
 signal wave_cleared
+signal boss_spawned
 signal completed
 signal enemy_resolved(leaked: bool)
 
@@ -10,6 +11,8 @@ const Enemy = preload("res://scripts/enemy_mover.gd")
 const MUSHROOM = Enemy.Kind.MUSHROOM
 const MOTH = Enemy.Kind.MOTH
 const TURTLE = Enemy.Kind.TURTLE
+const BEETLE_STAGE := 2
+const SLIME_STAGE := 3
 const MAX_PACK_SCALE := 5.0
 const MAX_SPAWN_RATE := 4.0
 const WAVES = [
@@ -33,6 +36,9 @@ var roster: Array = []
 func reset_for_stage(number: int) -> void:
 	stop()
 	for child in get_children():
+		if child is Enemy.HitFX:
+			child.hide()
+			child.queue_free()
 		if child is Enemy:
 			child.set_physics_process(false)
 			child.remove_from_group("enemy")
@@ -70,13 +76,13 @@ func spawn_interval(wave: int, percent: int) -> float:
 
 func wave_roster(wave: int) -> Array:
 	var members: Array = WAVES[wave - 1].roster.duplicate()
-	if stage >= 2:
+	if stage >= BEETLE_STAGE:
 		# Rotate the original pack before inserting the later-stage enemies.
 		for i in (stage + wave) % members.size():
 			members.push_back(members.pop_front())
 		for i in extra_stage_enemies():
 			var kind := Enemy.Kind.BEETLE
-			if stage >= 3 and (i + wave) % 2 == 1:
+			if stage >= SLIME_STAGE and (i + wave) % 2 == 1:
 				kind = Enemy.Kind.SLIME
 			members.insert((stage + 3 * i + wave) % (members.size() + 1), kind)
 	return members
@@ -84,6 +90,23 @@ func wave_roster(wave: int) -> Array:
 func start() -> void:
 	active = true
 	_on_wave_delay_timer_timeout()
+
+func wave_hint(wave: int) -> String:
+	if stage >= SLIME_STAGE:
+		var slime: Enemy.Profile = Enemy.profiles[Enemy.Kind.SLIME]
+		var beetle: Enemy.Profile = Enemy.profiles[Enemy.Kind.BEETLE]
+		return "%s%s（法抗 %d%%） · %s%s" % [slime.display_name, slime.guide_note,
+				slime.magic_resist_percent, beetle.display_name, beetle.guide_note]
+	if stage >= BEETLE_STAGE:
+		var beetle: Enemy.Profile = Enemy.profiles[Enemy.Kind.BEETLE]
+		return "%s · %s · 防御 %d" % [beetle.display_name, beetle.guide_note, beetle.defense]
+	var moth: Enemy.Profile = Enemy.profiles[MOTH]
+	if wave == 0:
+		return "首波 · %s与%s（法抗 %d%%）" % [Enemy.profiles[MUSHROOM].display_name, moth.display_name, moth.magic_resist_percent]
+	if wave == 1:
+		return "%s · 法抗 %d%%" % [moth.display_name, moth.magic_resist_percent]
+	var focus: Enemy.Profile = Enemy.profiles[TURTLE] if wave == 2 else Enemy.boss_profile
+	return "%s · %s" % [focus.display_name, focus.defenses_text()]
 
 func stop() -> void:
 	active = false
@@ -113,20 +136,8 @@ func _on_spawn_delay_timeout() -> void:
 		# Sample across the full pack so that a smaller wave still has its closing enemy.
 		index = roundi(enemies_spawned_this_wave * (roster.size() - 1.0) / (current_wave_spawn_count - 1))
 	enemy.kind = roster[index]
-	enemy.max_hp = strength(stats.hp)
-	enemy.speed = stats.speed * (1.0 + minf(0.4, (stage - 1) * 0.035))
-	match enemy.kind:
-		MOTH:
-			enemy.speed *= 1.65
-			enemy.max_hp = ceili(enemy.max_hp * 0.65)
-		TURTLE:
-			enemy.speed *= 0.68
-			enemy.max_hp *= 2
-		Enemy.Kind.BEETLE:
-			enemy.speed *= 0.95
-		Enemy.Kind.SLIME:
-			enemy.speed *= 0.85
-	enemy.max_hp = adjusted_hp(enemy.max_hp)
+	enemy.max_hp = adjusted_hp(ceili(strength(stats.hp) * enemy.profile.hp_multiplier))
+	enemy.speed = stats.speed * (1.0 + minf(0.4, (stage - 1) * 0.035)) * enemy.profile.speed_multiplier
 	enemy.hp = enemy.max_hp
 	enemy.entry_guard = 0.85 * late_wave_pressure()
 	enemy.loop = false
@@ -141,16 +152,17 @@ func spawn_final_boss() -> void:
 	boss = Enemy.new()
 	boss.kind = TURTLE
 	boss.is_boss = true
-	boss.max_hp = adjusted_hp(strength(84))
+	boss.max_hp = adjusted_hp(strength(boss.profile.boss_base_hp))
 	boss.hp = boss.max_hp
 	boss.entry_guard = 0.85 * late_wave_pressure()
-	boss.speed = 55.0
+	boss.speed = boss.profile.boss_speed
 	boss.loop = false
 	boss.rotates = false
 	boss.resolved.connect(enemy_destroyed)
 	current_wave_spawn_count += 1
 	enemies_spawned_this_wave += 1
 	add_child(boss)
+	boss_spawned.emit()
 
 func enemy_destroyed(leaked: bool) -> void:
 	if not active:

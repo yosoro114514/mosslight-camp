@@ -281,12 +281,14 @@ func paint_hud(n, g) -> void:
 	heart(n, Vector2(322,59))
 	label(n,Vector2(342,62),"床铺",15,MINT)
 	label(n,Vector2(315,92),"%d / %d" % [g.hp,g.MAX_HP],24,CREAM)
-	draw_seed(n, Vector2(451,59))
-	label(n,Vector2(469,62),"种子",15,MINT)
-	label(n,Vector2(445,92),str(g.seeds),24,CREAM)
+	draw_seed(n, Vector2(414,59))
+	label(n,Vector2(432,62),"种子",15,MINT)
+	label(n,Vector2(407,92),str(g.seeds),24,CREAM)
 	var buy_level: int = g.auto_plant_level() if g.auto_enabled else g.plant_level
 	var price: int = g.plant_price(buy_level)
 	if g.phase <= g.Phase.BATTLE:
+		box(n,g.RESTART_BUTTON,INK,10)
+		centered(n,g.RESTART_BUTTON.position.x,g.RESTART_BUTTON.get_center().y+6,g.RESTART_BUTTON.size.x,"重开",18,CREAM)
 		box(n,Rect2(23,849,178,37),INK,10)
 		draw_seed(n,Vector2(44,870))
 		var status_text := "可种植" if g.seeds >= price else "种子不足"
@@ -324,22 +326,18 @@ func paint_hud(n, g) -> void:
 		status = "准备下一波" if g.intermission else "第 %d 波来袭" % wave
 	elif g.phase > g.Phase.BATTLE:
 		status = "守夜结束"
-	var roster := ["首波 · 蘑菇怪与疾翅蛾（法抗 25%）","疾翅蛾 · 法抗 25%","岩壳龟 · 防御 1 · 法抗 -20%","金冠岩壳龟 · 防御 2 · 法抗 -20%"]
-	if g.stage >= 2:
-		var threat := "本关 · 赤角甲虫冲刺 · 防御 1" if g.stage == 2 else "本关 · 苔灵回血（法抗 35%） · 甲虫冲刺"
-		roster.fill(threat)
 	var boss = g.path.boss
 	if g.phase == g.Phase.BATTLE and is_instance_valid(boss) and not boss.is_destroyed:
 		box(n,Rect2(44,720,54,25),Color("#873e35"),6)
 		centered(n,44,739,54,"BOSS",14,CREAM)
-		label(n,Vector2(106,740),"岩壳龟",21,INK)
-		label(n,Vector2(45,787),"防御 2 · 法抗 -20%",14,INK)
+		label(n,Vector2(106,740),boss.profile.display_name,21,INK)
+		label(n,Vector2(45,787),boss.profile.defenses_text(),14,INK)
 		label(n,Vector2(218,740),"%d / %d" % [ceili(boss.hp),boss.max_hp],18,INK,144,HORIZONTAL_ALIGNMENT_RIGHT)
 		box(n,Rect2(44,755,320,16),Color("#553d32"),8)
 		var fraction := clampf(float(boss.hp) / boss.max_hp,0,1)
 		box(n,Rect2(47,758,314*fraction,10),Color("#d76e4d"),4)
 	else:
-		label(n,Vector2(46,735),roster[shown_wave] if g.intermission else roster[wave],14,Color("#657457"))
+		label(n,Vector2(46,735),g.path.wave_hint(shown_wave if g.intermission else wave),14,Color("#657457"))
 		label(n,Vector2(44,770),status,25,INK)
 		var count: int = g.path.pack_size(shown_wave,percent) if preview else g.path.current_wave_spawn_count
 		var interval: float = g.path.spawn_interval(shown_wave,percent) if preview else g.path.wave_interval
@@ -347,7 +345,11 @@ func paint_hud(n, g) -> void:
 			label(n,Vector2(202,766),"%d 只 · %.2f 秒/只" % [count,interval],17,Color("#49613d"))
 	box(n,g.BUTTON,Color("#264a3c"),11)
 	var action := "开始守夜" if g.phase == g.Phase.PREP else ("速度  ×2" if Engine.time_scale > 1 else "速度  ×1")
-	centered(n,g.BUTTON.position.x,758,g.BUTTON.size.x,action,21,CREAM)
+	centered(n,g.BUTTON.position.x,g.BUTTON.get_center().y+7,g.BUTTON.size.x,action,20,CREAM)
+	if g.phase <= g.Phase.BATTLE:
+		var guide_button: Rect2 = g.bestiary.OPEN_BUTTON
+		box(n,guide_button,Color("#dce5c9"),10)
+		centered(n,guide_button.position.x,guide_button.get_center().y+6,guide_button.size.x,"怪物图鉴",17,INK)
 	n.draw_line(Vector2(44,791),Vector2(554,791),Color("#d6d3af"),1.5)
 	if g.phase <= g.Phase.BATTLE:
 		var action_text := "自动种植 %d 级" % buy_level if g.auto_enabled else "点空格种植"
@@ -366,21 +368,60 @@ func paint_hud(n, g) -> void:
 		if g.notice_time > 0:
 			box(n,Rect2(23,651,554,39),INK,10)
 			centered(n,23,677,554,g.notice,16,CREAM)
-	if g.phase == g.Phase.WON or g.phase == g.Phase.LOST:
+	if g.restart_open:
+		restart_menu(n,g)
+	elif g.phase == g.Phase.WON or g.phase == g.Phase.LOST:
 		result(n,g)
+	if not g.restart_open:
+		draw_sound_button(n,g.SOUND_BUTTON,g.sound.muted)
+
+func draw_sound_button(n: CanvasItem, rect: Rect2, muted: bool) -> void:
+	box(n,rect,INK,10)
+	var p := rect.get_center()
+	var color := MINT if muted else CREAM
+	n.draw_colored_polygon(PackedVector2Array([
+		p+Vector2(-13,-4),p+Vector2(-8,-4),p+Vector2(-2,-10),
+		p+Vector2(-2,10),p+Vector2(-8,4),p+Vector2(-13,4)]),color)
+	if muted:
+		n.draw_line(p+Vector2(4,-4),p+Vector2(12,4),color,2.5,true)
+		n.draw_line(p+Vector2(4,4),p+Vector2(12,-4),color,2.5,true)
+	else:
+		n.draw_arc(p+Vector2(-2,0),8,-0.8,0.8,10,color,2.4,true)
+		n.draw_arc(p+Vector2(-2,0),14,-0.8,0.8,14,color,2.4,true)
+
+func restart_menu(n, g) -> void:
+	var battle: bool = g.phase == g.Phase.BATTLE
+	var top := 262 if battle else 342
+	n.draw_rect(Rect2(0,0,600,890),Color("#132d27bf"))
+	box(n,Rect2(77,top,446,600-top),INK,20)
+	box(n,Rect2(82,top+5,436,590-top),CREAM,16)
+	centered(n,82,top+54,436,"重新开始",30,INK)
+	if battle:
+		var retry: Rect2 = g.RETRY_CHOICE
+		box(n,retry,INK,10)
+		centered(n,retry.position.x,retry.position.y+29,retry.size.x,"重试本关",21,CREAM)
+		centered(n,retry.position.x,retry.position.y+54,retry.size.x,"返回第 %d 关开战前的布阵和资源" % g.stage,16,MINT)
+	var fresh: Rect2 = g.NEW_RUN_CHOICE
+	box(n,fresh,Color("#713f32"),10)
+	centered(n,fresh.position.x,fresh.position.y+32,fresh.size.x,"从第一关重新开始",21,CREAM)
+	centered(n,fresh.position.x,fresh.position.y+59,fresh.size.x,"重新保存进度 · 1 级叶狐、6 枚种子、训练 +0",16,CREAM)
+	if not g.restart_error.is_empty():
+		centered(n,82,523,436,g.restart_error,16,Color("#94432e"))
+	var cancel: Rect2 = g.CANCEL_RESTART
+	box(n,cancel,Color("#d8dcc8"),10)
+	centered(n,cancel.position.x,cancel.position.y+30,cancel.size.x,"取消",18,INK)
 
 func result(n, g) -> void:
 	var won: bool = g.phase == g.Phase.WON
 	n.draw_rect(Rect2(0,0,600,890),Color("#132d27ac"))
-	box(n,Rect2(79,292,442,293),INK,21)
-	box(n,Rect2(84,297,432,283),CREAM,17)
+	box(n,Rect2(79,292,442,355),INK,21)
+	box(n,Rect2(84,297,432,345),CREAM,17)
 	sprite(n,BLOOM if won else BED,Vector2(300,352),70)
 	centered(n,85,424,430,("第 %d 关守住了" if won else "第 %d 关失守") % g.stage,31,INK)
 	centered(n,85,464,430,"击败 %d 个敌人   ·   合成 %d 次" % [g.hit_count,g.merge_count],18,Color("#677354"))
 	box(n,g.RESULT_BUTTON,INK,10)
 	centered(n,202,529,196,("进入第 %d 关" % (g.stage + 1)) if won else "重试本关",21,CREAM)
 	centered(n,90,567,420,"继承阵容与种子  ·  补给 3 种子、修复 1 生命" if won else "返回开战前的布阵和资源",16,Color("#52694e"))
-	if not won:
-		box(n,g.NEW_RUN_BUTTON,INK,9)
-		centered(n,202,614,196,"从第一关重新开始",16,CREAM)
+	box(n,g.NEW_RUN_BUTTON,INK,9)
+	centered(n,202,614,196,"从第一关重新开始",16,CREAM)
 
