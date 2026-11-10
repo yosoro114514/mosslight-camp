@@ -1,7 +1,9 @@
 extends Node2D
 
 const ENTER_BUTTON := Rect2(156, 637, 288, 70)
-const RESTART_BUTTON := Rect2(191, 726, 218, 52)
+const RESTART_BUTTON := Rect2(310, 726, 195, 52)
+const TUTORIAL_BUTTON := Rect2(200, 726, 200, 52)
+const SAVED_TUTORIAL_BUTTON := Rect2(95, 726, 195, 52)
 const BESTIARY_BUTTON := Rect2(24, 24, 132, 46)
 const SOUND_BUTTON := Rect2(516, 24, 60, 46)
 const FIREFLIES := [Vector2(78, 348), Vector2(108, 487), Vector2(172, 375),
@@ -58,8 +60,10 @@ func _input(event: InputEvent) -> void:
 		var buttons := [ENTER_BUTTON, BESTIARY_BUTTON, SOUND_BUTTON]
 		if confirming_restart:
 			buttons = [camp.NEW_RUN_CHOICE, camp.CANCEL_RESTART]
-		elif camp.checkpoints.revision > 0:
-			buttons.append(RESTART_BUTTON)
+		else:
+			buttons.append(tutorial_button())
+			if camp.checkpoints.revision > 0:
+				buttons.append(RESTART_BUTTON)
 		for button: Rect2 in buttons:
 			if button.has_point(pointer):
 				pressed_button = button
@@ -72,6 +76,10 @@ func _input(event: InputEvent) -> void:
 				enter_camp()
 			elif button == BESTIARY_BUTTON:
 				camp.bestiary.open()
+			elif button == tutorial_button():
+				camp.sound.activate()
+				get_tree().paused = false
+				get_tree().change_scene_to_file("res://scenes/tutorial.tscn")
 			elif button == RESTART_BUTTON:
 				camp.restart_error = ""
 				confirming_restart = true
@@ -88,6 +96,9 @@ func cancel_press() -> void:
 	pointer_id = -2
 	pressed_button = Rect2()
 	pointer = Vector2(-1, -1)
+
+func tutorial_button() -> Rect2:
+	return SAVED_TUTORIAL_BUTTON if camp.checkpoints.revision > 0 else TUTORIAL_BUTTON
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
@@ -131,6 +142,9 @@ func _draw() -> void:
 		draw_string_outline(art.FONT,Vector2(0,613),progress,HORIZONTAL_ALIGNMENT_CENTER,600,18,4,art.INK)
 		art.centered(self, 0, 613, 600, progress, 18, art.CREAM)
 		draw_button(RESTART_BUTTON, "重新开始", Color("#38584a"), art.CREAM, 21)
+	else:
+		art.centered(self, 0, 612, 600, "初次守夜，可以先练习一波。", 19, art.CREAM)
+	draw_button(tutorial_button(), "新手教程", Color("#38584a"), art.CREAM, 21)
 	draw_button(BESTIARY_BUTTON, "怪物图鉴", art.INK, art.CREAM, 18)
 	art.draw_sound_button(self, SOUND_BUTTON, camp.sound.muted)
 	if confirming_restart:

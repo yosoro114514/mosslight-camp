@@ -1,58 +1,7 @@
-extends Node2D
+extends "res://scripts/camp_book.gd"
 
 const Enemy = preload("res://scripts/enemy_mover.gd")
-const OPEN_BUTTON := Rect2(389, 753, 164, 36)
-const CLOSE_BUTTON := Rect2(454, 66, 98, 44)
-
-var close_pointer := -2
-var previously_paused := false
-
-func _ready() -> void:
-	process_mode = Node.PROCESS_MODE_WHEN_PAUSED
-	hide()
-
-func open() -> void:
-	if visible:
-		return
-	previously_paused = get_tree().paused
-	close_pointer = -2
-	show()
-	get_tree().paused = true
-
-func close() -> void:
-	hide()
-	get_tree().paused = previously_paused
-
-func _exit_tree() -> void:
-	if visible:
-		get_tree().paused = previously_paused
-
-func _input(event: InputEvent) -> void:
-	if not visible:
-		return
-	get_viewport().set_input_as_handled()
-	if event.is_action_pressed("ui_cancel"):
-		close()
-		return
-	var id := -1
-	if event is InputEventScreenTouch:
-		id = event.index
-		if event.canceled:
-			if close_pointer == id:
-				close_pointer = -2
-			return
-	elif not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT):
-		return
-	if event.pressed and CLOSE_BUTTON.has_point(event.position) and close_pointer == -2:
-		close_pointer = id
-	elif not event.pressed and close_pointer == id:
-		close_pointer = -2
-		if CLOSE_BUTTON.has_point(event.position):
-			close()
-
-func _notification(what: int) -> void:
-	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
-		close_pointer = -2
+const OPEN_BUTTON := Rect2(474, 753, 79, 36)
 
 func _draw() -> void:
 	var camp = get_parent()

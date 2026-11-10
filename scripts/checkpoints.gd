@@ -5,9 +5,12 @@ const Evolution = preload("res://scripts/evolution.gd")
 # Alternate slots so a partially written checkpoint leaves the last one readable.
 static var prefix := "user://camp-run-"
 var revision := 0
+var persistent := true
 
 func latest(cells: int, kinds: int, max_level: int, max_hp: int) -> Dictionary:
 	var newest := {}
+	if not persistent:
+		return newest
 	for slot in 2:
 		var path := prefix + str(slot) + ".save"
 		if not FileAccess.file_exists(path):
@@ -47,6 +50,8 @@ func latest(cells: int, kinds: int, max_level: int, max_hp: int) -> Dictionary:
 	return newest
 
 func write(data: Dictionary) -> bool:
+	if not persistent:
+		return true
 	var next := revision + 1
 	var file := FileAccess.open(prefix + str(next % 2) + ".save", FileAccess.WRITE)
 	if not file:

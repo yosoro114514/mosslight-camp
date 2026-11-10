@@ -179,4 +179,5 @@ func enemy_destroyed(leaked: bool) -> void:
 			completed.emit()
 	else:
 		wave_cleared.emit()
-		$WaveDelayTimer.start()
+		if active:
+			$WaveDelayTimer.start()

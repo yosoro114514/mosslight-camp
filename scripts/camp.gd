@@ -59,6 +59,7 @@ var allies := PackedInt32Array()
 var forms := PackedByteArray()
 var evolution := Evolution.new()
 var bestiary := preload("res://scripts/bestiary.gd").new()
+var handbook := preload("res://scripts/handbook.gd").new()
 var attack_cooldowns := PackedFloat32Array()
 var selected_ally := Ally.FOX
 var plant_level := 1
@@ -84,6 +85,7 @@ var dragging := false
 var art := BoardArt.new()
 var sound := preload("res://scripts/camp_sound.gd").new()
 @onready var path = $PathSpawner
+@onready var tutorial = get_node_or_null("Tutorial")
 
 func _ready() -> void:
 	add_child(sound)
@@ -92,6 +94,7 @@ func _ready() -> void:
 	forms.resize(levels.size())
 	add_child(evolution)
 	add_child(bestiary)
+	add_child(handbook)
 	evolution.chosen.connect(resolve_evolution)
 	attack_cooldowns.resize(levels.size())
 	levels[0] = 1
@@ -103,11 +106,14 @@ func _ready() -> void:
 	path.enemy_resolved.connect(_on_enemy_resolved)
 	path.completed.connect(func(): finish(true))
 	starting_board = board_snapshot()
+	checkpoints.persistent = tutorial == null
 	checkpoint = checkpoints.latest(levels.size(), ALLY_NAMES.size(), MAX_LEVEL, MAX_HP)
 	if checkpoint.is_empty():
 		checkpoint = starting_board.duplicate(true)
 	else:
 		restore_checkpoint()
+	if OS.has_feature("web") and not has_node("TitleScreen"):
+		sound.activate()
 	queue_redraw()
 
 func projected_hp_percent(wave: int) -> int:
@@ -560,7 +566,9 @@ func save_deployment_choice() -> void:
 		message("进度保存失败，请检查磁盘空间")
 
 func handle_input(event: InputEvent) -> void:
-	if restart_open and event.is_action_pressed("ui_cancel"):
+	if tutorial and event.is_action_pressed("ui_cancel"):
+		tutorial.leave()
+	elif restart_open and event.is_action_pressed("ui_cancel"):
 		set_restart_open(false)
 	elif event is InputEventScreenTouch:
 		if event.canceled and event.index == pointer_id:
@@ -602,6 +610,9 @@ func end_pointer(id: int, pos: Vector2) -> void:
 		return
 	move_pointer(pos)
 	var dest := cell_at(pos)
+	if tutorial and tutorial.consume_release(pos):
+		cancel_pointer()
+		return
 	if restart_open:
 		if tapped(CANCEL_RESTART, pos):
 			set_restart_open(false)
@@ -622,6 +633,8 @@ func end_pointer(id: int, pos: Vector2) -> void:
 		set_restart_open(true)
 	elif tapped(bestiary.OPEN_BUTTON, pos):
 		bestiary.open()
+	elif tapped(handbook.OPEN_BUTTON, pos):
+		handbook.open()
 	elif pressed_cell >= 0 and dragging:
 		if phase == Phase.PREP and RECALL_RECT.has_point(pos):
 			seeds += 1 << (levels[pressed_cell] - 1)
@@ -675,6 +688,8 @@ func end_pointer(id: int, pos: Vector2) -> void:
 				notice_time = 0.0
 				save_deployment_choice()
 	cancel_pointer()
+	if tutorial:
+		tutorial.after_action()
 
 func change_plant_level(step: int) -> void:
 	var next := clampi(plant_level + step, 1, MAX_LEVEL)

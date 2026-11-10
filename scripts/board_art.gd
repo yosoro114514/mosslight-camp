@@ -268,9 +268,10 @@ func paint_hud(n, g) -> void:
 	box(n, Rect2(20,24,560,98), Color("#203a3055"), 18)
 	box(n, Rect2(20,20,560,98), INK, 18)
 	box(n, Rect2(25,25,550,88), Color("#2d4d40"), 14)
-	label(n, Vector2(44,51), "第 %d 关   /   无尽守夜" % g.stage, 15, GOLD)
+	label(n, Vector2(44,51), "新手教程   /   一波练习" if g.tutorial else "第 %d 关   /   无尽守夜" % g.stage, 15, GOLD)
 	label(n, Vector2(41,94), "苔灯营地", 37, CREAM)
-	var preview: bool = g.phase == g.Phase.PREP or g.intermission
+	var practice_clear: bool = g.tutorial != null and g.tutorial.wave_clear
+	var preview: bool = g.phase == g.Phase.PREP or (g.intermission and not practice_clear)
 	var wave: int = g.path.current_wave
 	var shown_wave: int = clampi(wave + int(preview), 1, g.path.WAVES.size())
 	var percent: int = g.projected_hp_percent(shown_wave) if preview else g.path.wave_hp_percent
@@ -288,7 +289,7 @@ func paint_hud(n, g) -> void:
 	var price: int = g.plant_price(buy_level)
 	if g.phase <= g.Phase.BATTLE:
 		box(n,g.RESTART_BUTTON,INK,10)
-		centered(n,g.RESTART_BUTTON.position.x,g.RESTART_BUTTON.get_center().y+6,g.RESTART_BUTTON.size.x,"重开",18,CREAM)
+		centered(n,g.RESTART_BUTTON.position.x,g.RESTART_BUTTON.get_center().y+6,g.RESTART_BUTTON.size.x,"退出" if g.tutorial else "重开",18,CREAM)
 		box(n,Rect2(23,849,178,37),INK,10)
 		draw_seed(n,Vector2(44,870))
 		var status_text := "可种植" if g.seeds >= price else "种子不足"
@@ -336,6 +337,9 @@ func paint_hud(n, g) -> void:
 		box(n,Rect2(44,755,320,16),Color("#553d32"),8)
 		var fraction := clampf(float(boss.hp) / boss.max_hp,0,1)
 		box(n,Rect2(47,758,314*fraction,10),Color("#d76e4d"),4)
+	elif practice_clear:
+		label(n,Vector2(46,735),"击败 %d 只怪物，获得 %d 枚种子" % [g.hit_count,2*g.hit_count],15,Color("#49613d"))
+		label(n,Vector2(44,770),"第一波已守住",25,INK)
 	else:
 		label(n,Vector2(46,735),g.path.wave_hint(shown_wave if g.intermission else wave),14,Color("#657457"))
 		label(n,Vector2(44,770),status,25,INK)
@@ -343,13 +347,15 @@ func paint_hud(n, g) -> void:
 		var interval: float = g.path.spawn_interval(shown_wave,percent) if preview else g.path.wave_interval
 		if g.phase <= g.Phase.BATTLE:
 			label(n,Vector2(202,766),"%d 只 · %.2f 秒/只" % [count,interval],17,Color("#49613d"))
-	box(n,g.BUTTON,Color("#264a3c"),11)
-	var action := "开始守夜" if g.phase == g.Phase.PREP else ("速度  ×2" if Engine.time_scale > 1 else "速度  ×1")
-	centered(n,g.BUTTON.position.x,g.BUTTON.get_center().y+7,g.BUTTON.size.x,action,20,CREAM)
+	if not practice_clear:
+		box(n,g.BUTTON,Color("#264a3c"),11)
+		var action := "开始守夜" if g.phase == g.Phase.PREP else ("速度  ×2" if Engine.time_scale > 1 else "速度  ×1")
+		centered(n,g.BUTTON.position.x,g.BUTTON.get_center().y+7,g.BUTTON.size.x,action,20,CREAM)
 	if g.phase <= g.Phase.BATTLE:
-		var guide_button: Rect2 = g.bestiary.OPEN_BUTTON
-		box(n,guide_button,Color("#dce5c9"),10)
-		centered(n,guide_button.position.x,guide_button.get_center().y+6,guide_button.size.x,"怪物图鉴",17,INK)
+		for book in [g.handbook, g.bestiary]:
+			var rect: Rect2 = book.OPEN_BUTTON
+			box(n,rect,Color("#dce5c9"),9)
+			centered(n,rect.position.x,rect.get_center().y+6,rect.size.x,"守夜手册" if book == g.handbook else "怪物图鉴",16,INK)
 	n.draw_line(Vector2(44,791),Vector2(554,791),Color("#d6d3af"),1.5)
 	if g.phase <= g.Phase.BATTLE:
 		var action_text := "自动种植 %d 级" % buy_level if g.auto_enabled else "点空格种植"
